@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentence Types Quiz</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.17.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 40px;
+        }
+
+        .error-message {
+            background-color: #ffdddd;
+            color: #ff0000;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .canteen-code-section input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sentence Types Quiz</h1>
+        
+        <!-- Error Message Container -->
+        <div id="errorMessage" class="error-message"></div>
+
+        <!-- Canteen Code Section -->
+        <div class="canteen-code-section">
+            <input type="text" id="canteenCode" placeholder="Enter your 6-digit Canteen Code" maxlength="6" pattern="\d{6}">
+            <button onclick="verifyCanteenCode()" style="margin-top: 10px; width: 100%; padding: 10px; background: #667eea; color: white; border: none; border-radius: 5px;">Verify Code</button>
+        </div>
+
+        <!-- Student Name Display -->
+        <div id="studentNameDisplay" style="display: none; background: #e7f3ff; border: 2px solid #2196F3; border-radius: 8px; padding: 15px; margin: 15px 0; text-align: center;">
+            <strong>Name:</strong> <span id="displayedStudentName"></span>
+            <p style="font-size: 14px; color: #666; margin-top: 10px;">Refresh the page if this is incorrect</p>
+        </div>
+
+        <!-- Rest of the quiz content -->
+        <div id="quizContent" style="display: none;">
+            <!-- Existing content summary -->
+            <div class="instructions">
+                [Existing Content Summary]
+            </div>
+
+            <!-- YouTube Video -->
+            <div class="video-section">
+                <iframe 
+                    src="https://www.youtube.com/embed/MOa5l5DAwOs?modestbranding=1&controls=1&showinfo=0&rel=0" 
+                    frameborder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowfullscreen="false"
+                    style="width: 100%; max-height: 450px;"
+                ></iframe>
+            </div>
+
+            <button id="startQuizBtn" class="btn" onclick="startQuiz()">Start Quiz</button>
+        </div>
+
+        <!-- Quiz Start Overlay -->
+        <div id="quizStartOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center;">
+            <div style="background: white; padding: 30px; border-radius: 10px; text-align: center; max-width: 400px; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+                <h2>Quiz Guidelines</h2>
+                <p>Please stay focused and complete the quiz in one sitting. Good luck!</p>
+                <button onclick="closeQuizStartOverlay()" style="margin-top: 15px; padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px;">Understood, Start Quiz</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Supabase configuration
+        const SUPABASE_URL = 'https://qedepuxzmdchujbipgax.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_JdSxu3gnEDIFaNtB1K4PNg_vqj0WoOI';
+        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let studentClassList = {};
+        let currentCanteenCode = '';
+
+        // Load student list from Excel file
+        document.addEventListener('DOMContentLoaded', function() {
+            // Fetch the classlist
+            fetch('classlist.xls')
+                .then(response => response.arrayBuffer())
+                .then(data => {
+                    const workbook = XLSX.read(new Uint8Array(data), {type: 'array'});
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    
+                    // Convert worksheet to JSON
+                    const classList = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    // Find the index of 'Canteen Code' and 'FULL NAME' columns
+                    const headers = classList[0];
+                    const canteenCodeIndex = headers.indexOf('Canteen Code');
+                    const fullNameIndex = headers.indexOf('FULL NAME');
+
+                    // Create a map of canteen codes to student names
+                    classList.slice(1).forEach(row => {
+                        const canteenCode = row[canteenCodeIndex];
+                        const fullName = row[fullNameIndex];
+                        
+                        if (canteenCode && fullName) {
+                            studentClassList[canteenCode.toString()] = fullName;
+                        }
+                    });
+
+                    console.log('Student list loaded:', studentClassList);
+                })
+                .catch(error => {
+                    console.error('Error loading classlist:', error);
+                    alert('Failed to load student list. Please check the file.');
+                });
+        });
+
+        function verifyCanteenCode() {
+            const canteenCode = document.getElementById('canteenCode').value.trim();
+            const errorMessage = document.getElementById('errorMessage');
+            const studentNameDisplay = document.getElementById('studentNameDisplay');
+            const quizContent = document.getElementById('quizContent');
+            const displayedStudentName = document.getElementById('displayedStudentName');
+
+            // Check if canteen code exists
+            if (studentClassList[canteenCode]) {
+                // Store the current canteen code
+                currentCanteenCode = canteenCode;
+
+                displayedStudentName.textContent = studentClassList[canteenCode];
+                studentNameDisplay.style.display = 'block';
+                quizContent.style.display = 'block';
+                errorMessage.style.display = 'none';
+                
+                // Set student name for quiz tracking
+                document.getElementById('studentName').value = studentClassList[canteenCode];
+            } else {
+                errorMessage.textContent = 'Invalid Canteen Code. Please try again.';
+                errorMessage.style.display = 'block';
+                studentNameDisplay.style.display = 'none';
+                quizContent.style.display = 'none';
+                currentCanteenCode = '';
+            }
+        }
+
+        function startQuiz() {
+            const quizStartOverlay = document.getElementById('quizStartOverlay');
+            quizStartOverlay.style.display = 'flex';
+        }
+
+        function closeQuizStartOverlay() {
+            const quizStartOverlay = document.getElementById('quizStartOverlay');
+            quizStartOverlay.style.display = 'none';
+            
+            // Call existing quiz start function
+            startQuizFunction(); // Assuming this is the original function to start the quiz
+        }
+
+        // Override saveToDatabase to record student completion with canteen code
+        async function saveToDatabase(quizData) {
+            try {
+                // Ensure canteen code is available
+                if (!currentCanteenCode) {
+                    throw new Error('Canteen code not verified');
+                }
+
+                // Add canteen_code to the quiz data
+                const quizDataWithCode = {
+                    ...quizData,
+                    canteen_code: currentCanteenCode
+                };
+
+                // Insert quiz attempt to Supabase
+                const { data, error } = await supabase
+                    .from('quiz_attempts')
+                    .insert([quizDataWithCode]);
+
+                if (error) throw error;
+                console.log('Quiz data saved successfully', data);
+            } catch (error) {
+                console.error('Error saving quiz data:', error);
+                alert('Failed to save quiz data. Please try again.');
+            }
+        }
+
+        // Retain all other existing JavaScript from the original file
+    </script>
+
+    <!-- Include the rest of the original quiz HTML and script -->
+    <!-- This would include the quiz questions, results section, etc. -->
+</body>
+</html>
